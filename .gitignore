@@ -1,0 +1,59 @@
+# --------------------
+# Python cache
+# --------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# --------------------
+# Virtual environments
+# --------------------
+.venv/
+venv/
+env/
+
+# --------------------
+# Jupyter / notebooks
+# --------------------
+.ipynb_checkpoints/
+
+# --------------------
+# OS / editor files
+# --------------------
+.DS_Store
+Thumbs.db
+desktop.ini
+*.swp
+*.swo
+
+# --------------------
+# IDEs
+# --------------------
+.vscode/
+.idea/
+*.iml
+
+# --------------------
+# Logs & temp files
+# --------------------
+*.log
+*.tmp
+*.bak
+
+# --------------------
+# Generated figures & outputs
+# (uncomment if plots are regenerated)
+# --------------------
+figures/
+plots/
+output/
+results/
+
+# --------------------
+# Large data files (PIV / images)
+# --------------------
+raw_image/
+*.tif
+*.tiff
+*.TIF
+
