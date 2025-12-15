@@ -94,13 +94,13 @@ By default, it will:
 
 You can also process with periodice quality checks by uncommenting the relevant section in `main.py`
 
-## Proces LA & LB image pairs
+## Process LA & LB image pairs
 
 The functions in `src/piv_pipeline.py` can handle full PIV sequences, including LA and LB pairs. This allows consistent detection and masking across image pairs.
 
 ## File Structure
 
-```python
+```bash
 ├── src/
 │   └── piv_pipeline.py          # Core functions: detection, batch processing, visualization
 ├── tutorial/
