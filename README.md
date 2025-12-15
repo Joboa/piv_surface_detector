@@ -137,16 +137,13 @@ pip install numpy opencv-python matplotlib tqdm
 While this algorithm provides robust free-surface detection for PIV images, it has some limitations:
 
 1. Assumption of brightness
-
-- The method assumes the free surface is the brightest horizontal feature within the search region.
+The method assumes the free surface is the brightest horizontal feature within the search region.
 
 2. Sensitivity to foam or bubbles
-
-- Excessive surface foam, bubbles or reflections can interfere with detection and may reduce accuracy.
+Excessive surface foam, bubbles or reflections can interfere with detection and may reduce accuracy.
 
 3. Manual adjustment required
-
-- The search region and other parameters may need manual tuning for different flow conditins or camera setups.
+The search region and other parameters may need manual tuning for different flow conditins or camera setups.
 
 ## Very IMPORTANT
 
