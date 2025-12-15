@@ -42,7 +42,6 @@ desktop.ini
 
 # --------------------
 # Generated figures & outputs
-# (uncomment if plots are regenerated)
 # --------------------
 figures/
 plots/
@@ -53,6 +52,8 @@ results/
 # Large data files (PIV / images)
 # --------------------
 raw_image/
+raw_piv/
+masked_images/
 *.tif
 *.tiff
 *.TIF
