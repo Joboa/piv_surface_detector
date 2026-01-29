@@ -18,12 +18,12 @@ import glob
 from tqdm import tqdm
 
 
-def detect_free_surface_intensity_based(img, scan_width=True, 
-                                   x_start=None, x_end=None, auto_detect_bounds=True):
+def detect_free_surface_intensity_based(img, scan_width=True,
+                                        x_start=None, x_end=None, auto_detect_bounds=True):
     """
     Detect free surface based on intensity: the surface is typically
     the brightest horizontal feature due to reflection/refraction
-    
+
     Parameters:
     -----------
     img : ndarray
@@ -38,7 +38,7 @@ def detect_free_surface_intensity_based(img, scan_width=True,
         Ending x-coordinate for detection (default: auto-detect or image width)
     auto_detect_bounds : bool
         If True, automatically detect the valid horizontal region
-    
+
     Returns:
     --------
     mask : ndarray
@@ -65,11 +65,13 @@ def detect_free_surface_intensity_based(img, scan_width=True,
         print(f"Using image type of {img.dtype}")
         img_normalized = np.clip(img, 0.0, 1.0)
         img_normalized = (img_normalized * 255).astype(np.uint8)
-    
-    print(f"Image (Actual) size: max image: {img.max()}, min image: {img.min()}")
-    print(f"Image (Normalized) size: max image: {img_normalized.max()}, min image: {img_normalized.min()}")
+
+    print(
+        f"Image (Actual) size: max image: {img.max()}, min image: {img.min()}")
+    print(
+        f"Image (Normalized) size: max image: {img_normalized.max()}, min image: {img_normalized.min()}")
     print(f"Image dimensions: {img.shape}")
-    
+
     height, width = img.shape[:2]
 
     # Horizontal smoothing to find continuous bright regions
@@ -86,7 +88,7 @@ def detect_free_surface_intensity_based(img, scan_width=True,
         col_activity = np.max(smoothed[:search_height, :], axis=0)
         threshold = np.percentile(col_activity, 50)
         active_cols = np.where(col_activity > threshold)[0]
-        
+
         if len(active_cols) > 0:
             x_start = active_cols[0]
             # x_end = active_cols[-1] + 1 if x_end is None else x_end
@@ -96,17 +98,17 @@ def detect_free_surface_intensity_based(img, scan_width=True,
             x_start = 0
             x_end = width
             print("Could not auto-detect bounds, using full width")
-    
+
     # Use defaults if not set
     if x_start is None:
         x_start = 0
     if x_end is None:
         x_end = width
-    
+
     # Ensure valid bounds
     x_start = max(0, x_start)
     x_end = min(width, x_end)
-    
+
     print(f"Detection region: x=[{x_start}, {x_end}), width={x_end - x_start}")
 
     # Search region
@@ -147,7 +149,8 @@ def detect_free_surface_intensity_based(img, scan_width=True,
     else:
         print(f"Using {len(surface_points)} computed points")
         x_points = np.array([p[0] for p in surface_points])  # columns
-        y_points = np.array([p[1] for p in surface_points])  # position of the various intensities
+        # position of the various intensities
+        y_points = np.array([p[1] for p in surface_points])
 
         # Outlier removal using percentile-based method
         y_median = np.median(y_points)
@@ -208,7 +211,7 @@ def detect_free_surface_intensity_based(img, scan_width=True,
     return mask, y_line, x_line, metadata
 
 
-def process_piv_image_pair(la_path, lb_path, output_dir, visualize_first=False):
+def process_piv_image_pair(la_path, lb_path, output_dir, visualize_first=False, use_PNG=False):
     """
     Process a pair of PIV images (LA and LB) and save masked versions
     """
@@ -217,7 +220,8 @@ def process_piv_image_pair(la_path, lb_path, output_dir, visualize_first=False):
     img_lb = mpimg.imread(lb_path)
 
     # Detect surface from LA image
-    mask, surface_line, x_line, metadata = detect_free_surface_intensity_based(img_la)
+    mask, surface_line, x_line, metadata = detect_free_surface_intensity_based(
+        img_la)
 
     # Apply same mask to both images
     masked_la = img_la.copy()
@@ -234,13 +238,31 @@ def process_piv_image_pair(la_path, lb_path, output_dir, visualize_first=False):
     output_lb = os.path.join(output_dir, lb_basename)
 
     # Save masked images
-    # For binary black free surface mask
-    # cv2.imwrite(output_la, masked_la) 
-    # cv2.imwrite(output_lb, masked_lb)
+    if use_PNG:
+        # PNG for much better compression on binary data
+        output_la = os.path.join(output_dir, la_basename.replace('.TIF', '_mask.png'))
+        output_lb = os.path.join(output_dir, lb_basename.replace('.TIF', '_mask.png'))
 
-    # For integration with PIVLab mask
-    cv2.imwrite(output_la, mask)
-    cv2.imwrite(output_lb, mask)
+        # PNG compression
+        cv2.imwrite(output_la, mask, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+        cv2.imwrite(output_lb, mask, [cv2.IMWRITE_PNG_COMPRESSION, 9])
+
+    else:
+        # For binary black free surface mask
+        # cv2.imwrite(output_la, masked_la)
+        # cv2.imwrite(output_lb, masked_lb)
+
+        # For integration with PIVLab mask
+        cv2.imwrite(output_la, mask)
+        cv2.imwrite(output_lb, mask)
+    
+    # File size comparison
+    original_size = mask.size * mask.itemsize  # bytes
+    import os as os_module
+    if os_module.path.exists(output_la):
+        compressed_size = os_module.path.getsize(output_la)
+        print(f"Mask compression: {original_size} bytes → {compressed_size} bytes ({compressed_size/original_size*100:.1f}%)")
+
 
     return mask, surface_line, masked_la, masked_lb, metadata
 
@@ -345,7 +367,6 @@ def visualize_processing_result(original, masked, mask, surface_line, filename, 
 
     vmin, vmax = np.percentile(original, (1, 99))
 
-
     # Original with detected surface
     axes[0].imshow(original, cmap="gray", vmin=vmin, vmax=vmax)
     axes[0].plot(x_coords, surface_line, 'r-', linewidth=2)
@@ -360,7 +381,7 @@ def visualize_processing_result(original, masked, mask, surface_line, filename, 
     axes[1].axis("off")
 
     # Masked result
-    axes[2].imshow(masked, cmap="gray", vmin=vmin, vmax=vmax) # masked_la 
+    axes[2].imshow(masked, cmap="gray", vmin=vmin, vmax=vmax)  # masked_la
     axes[2].set_title("Masked Result")
     axes[2].axis("off")
 
