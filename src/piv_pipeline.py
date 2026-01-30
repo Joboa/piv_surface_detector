@@ -211,10 +211,12 @@ def detect_free_surface_intensity_based(img, scan_width=True,
     return mask, y_line, x_line, metadata
 
 
-def process_piv_image_pair(la_path, lb_path, output_dir, visualize_first=False, use_PNG=False):
+def process_piv_image_pair(la_path, lb_path, output_dir, visualize_first=False, use_PNG=False, save_mat=False):
     """
     Process a pair of PIV images (LA and LB) and save masked versions
     """
+    import uuid
+
     # Read both images
     img_la = mpimg.imread(la_path)
     img_lb = mpimg.imread(lb_path)
@@ -237,37 +239,80 @@ def process_piv_image_pair(la_path, lb_path, output_dir, visualize_first=False, 
     output_la = os.path.join(output_dir, la_basename)
     output_lb = os.path.join(output_dir, lb_basename)
 
-    # Save masked images
-    if use_PNG:
-        # PNG for much better compression on binary data
-        output_la = os.path.join(output_dir, la_basename.replace('.TIF', '_mask.png'))
-        output_lb = os.path.join(output_dir, lb_basename.replace('.TIF', '_mask.png'))
+    # ROI cell data if save_mat is True
+    roi_cell = None
+    if save_mat:
+        # Boundary contour points from mask
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if len(contours) > 0:
+            # Get the largest contour (the main mask region)
+            largest_contour = max(contours, key=cv2.contourArea)
+            # Convert to nx2 array (x, y coordinates)
+            boundary_points = largest_contour.reshape(-1, 2).astype(np.float64)
+            boundary_points = boundary_points + 1  # MATLAB 1-based indexing
+        else:
+            # Fallback: use surface line points
+            print(f"Using surface line points")
+            boundary_points = np.column_stack(
+                (x_line, surface_line)).astype(np.float64)
+            boundary_points = boundary_points + 1  # MATLAB 1-based indexing
+
+        # Unique ID for this mask
+        unique_id = 'tp' + str(uuid.uuid4()).replace('-', '_')
+
+        # PIVLab format structure with 5 elements
+        # Structure:
+        #   {1,1}: 'ROI_object_external'
+        #   {1,2}: nx2 boundary points
+        #   {1,3}: [0.2422, 0.1504, 0.6603] - RGB color
+        #   {1,4}: [] - empty array
+        #   {1,5}: unique ID string
+        roi_cell = np.empty((1, 5), dtype=object)
+        roi_cell[0, 0] = 'ROI_object_external'
+        roi_cell[0, 1] = boundary_points
+        roi_cell[0, 2] = np.array([0.2422, 0.1504, 0.6603])  # RGB color
+        roi_cell[0, 3] = ""  # np.array([])  # Empty array
+        roi_cell[0, 4] = unique_id  # Unique ID
+
+        print(
+            f"PIVLab ROI cell with {len(boundary_points)} boundary points, ID: {unique_id}")
+
+    elif use_PNG:
+        # PNG compression on binary data
+        output_la = output_la.replace('.TIF', '_mask.png')
+        output_lb = output_lb.replace('.TIF', '_mask.png')
 
         # PNG compression
         cv2.imwrite(output_la, mask, [cv2.IMWRITE_PNG_COMPRESSION, 9])
         cv2.imwrite(output_lb, mask, [cv2.IMWRITE_PNG_COMPRESSION, 9])
 
     else:
-        # For binary black free surface mask
-        # cv2.imwrite(output_la, masked_la)
-        # cv2.imwrite(output_lb, masked_lb)
-
-        # For integration with PIVLab mask
+        # Default: save as regular mask image
         cv2.imwrite(output_la, mask)
         cv2.imwrite(output_lb, mask)
-    
+
     # File size comparison
-    original_size = mask.size * mask.itemsize  # bytes
-    import os as os_module
-    if os_module.path.exists(output_la):
-        compressed_size = os_module.path.getsize(output_la)
-        print(f"Mask compression: {original_size} bytes → {compressed_size} bytes ({compressed_size/original_size*100:.1f}%)")
+    if not save_mat:
+        original_size = mask.size * mask.itemsize  # bytes
+        import os as os_module
+
+        # Check the actual output file
+        if use_PNG:
+            check_file = output_la.replace('.TIF', '_mask.png')
+        else:
+            check_file = output_la
+
+        if os_module.path.exists(check_file):
+            compressed_size = os_module.path.getsize(check_file)
+            print(
+                f"File size: {original_size} bytes → {compressed_size} bytes ({compressed_size/original_size*100:.1f}%)")
+
+    return mask, surface_line, masked_la, masked_lb, metadata, roi_cell
 
 
-    return mask, surface_line, masked_la, masked_lb, metadata
-
-
-def batch_process_piv_images(input_dir, output_dir, pattern="*.TIF", visualize_first=True):
+def batch_process_piv_images(input_dir, output_dir, pattern="*.TIF", visualize_first=True, use_PNG=False, save_mat=False):
     """
     Batch process all PIV image pairs in a directory
 
@@ -281,6 +326,10 @@ def batch_process_piv_images(input_dir, output_dir, pattern="*.TIF", visualize_f
         File pattern to match (default: "*.TIF")
     visualize_first : bool
         Whether to show visualization for the first pair
+    use_PNG : bool
+        If True, save masks as compressed PNG files
+    save_mat : bool
+        If True, save all masks in single PIVLab .mat format file
     """
     # Output directory
     os.makedirs(output_dir, exist_ok=True)
@@ -299,6 +348,9 @@ def batch_process_piv_images(input_dir, output_dir, pattern="*.TIF", visualize_f
     fail_count = 0
     surface_positions = []
 
+    # All ROI cells for .mat format
+    all_roi_cells = []
+
     # Process each pair
     for idx, la_path in enumerate(tqdm(la_files, desc="Processing PIV pairs")):
         # Corresponding LB path
@@ -311,13 +363,15 @@ def batch_process_piv_images(input_dir, output_dir, pattern="*.TIF", visualize_f
             continue
 
         try:
-            # Process the pair
-            mask, surface_line, masked_la, masked_lb, metadata = process_piv_image_pair(
-                la_path, lb_path, output_dir
+            mask, surface_line, masked_la, masked_lb, metadata, roi_cell = process_piv_image_pair(
+                la_path, lb_path, output_dir, use_PNG=use_PNG, save_mat=save_mat
             )
 
             success_count += 1
             surface_positions.append(np.mean(surface_line))
+
+            if save_mat and roi_cell is not None:
+                all_roi_cells.append(roi_cell)
 
             # Visualize first pair
             if visualize_first and idx == 0:
@@ -333,6 +387,22 @@ def batch_process_piv_images(input_dir, output_dir, pattern="*.TIF", visualize_f
         except Exception as e:
             print(f"\nError processing {os.path.basename(la_path)}: {str(e)}")
             fail_count += 1
+
+    # Save all masks in single .mat file for PIVLab
+    if save_mat and len(all_roi_cells) > 0:
+        from scipy.io import savemat
+
+        # 1 x n cell array containing all masks
+        masks_in_frame = np.empty((1, len(all_roi_cells)), dtype=object)
+        for i, roi_cell in enumerate(all_roi_cells):
+            masks_in_frame[0, i] = roi_cell
+
+        # Save to single .mat file
+        mat_output_path = os.path.join(output_dir, 'masks_in_frame.mat')
+        savemat(mat_output_path, {
+                'masks_in_frame': masks_in_frame}, format='5')
+        print(f"\nSaved {len(all_roi_cells)} masks to {mat_output_path}")
+        print(f"  Structure: masks_in_frame [1×{len(all_roi_cells)} cell]")
 
     # Process summary
     print("\n" + "="*60)
